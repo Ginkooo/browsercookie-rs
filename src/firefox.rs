@@ -12,6 +12,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::errors::BrowsercookieError;
 
+#[allow(non_snake_case)]
 #[derive(Deserialize, Debug)]
 struct MozCookie {
     host: String,
@@ -53,8 +54,8 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>
             Some(path) => {
                 default_profile_path.push(path);
                 break
-            },
-            _ => println!("Not default profile")
+            }
+            None => continue
         }
     }
     Ok(default_profile_path)
@@ -67,7 +68,6 @@ fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>) -> Result<
     if recovery_mmap.len() <= 8 || recovery_mmap.get(0..8).ok_or("Invalid recovery")? != "mozLz40\0".as_bytes() {
         return Err(Box::new(BrowsercookieError::InvalidRecovery(String::from("Firefox invalid recovery archive"))))
     }
-    // println!("{:?}", recovery_mmap.get(0..8)?);
 
     let mut rdr = Cursor::new(recovery_mmap.get(8..12).ok_or("Invalid recovery")?);
     let uncompressed_size = rdr.read_i32::<LittleEndian>().ok();
@@ -77,7 +77,7 @@ fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>) -> Result<
     let recovery_json: Value = serde_json::from_slice(&recovery_json_bytes)?;
     for c in recovery_json["cookies"].as_array().ok_or("Invalid recovery")? {
         if let Ok(cookie) = serde_json::from_value(c.clone()) as Result<MozCookie, serde_json::error::Error> {
-            bcj.add_original(Cookie::build(cookie.name, cookie.value)
+            bcj.add(Cookie::build(cookie.name, cookie.value)
                              .domain(cookie.host)
                              .path(cookie.path)
                              .secure(cookie.secure)
@@ -89,6 +89,11 @@ fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>) -> Result<
 }
 
 pub(crate) fn load() -> Result<Box<CookieJar>, Box<Error>>  {
+    // Returns a CookieJar on heap if following steps go right
+    //
+    // 1. Get default profile path for firefox from master ini profiles config.
+    // 2. Load cookies from recovery json (sessionstore-backups/recovery.jsonlz4)
+    //    of the default profile.
     let mut bcj = Box::new(CookieJar::new());
 
     let master_profile_path = get_master_profile_path();
@@ -107,7 +112,6 @@ pub(crate) fn load() -> Result<Box<CookieJar>, Box<Error>>  {
 
     load_from_recovery(&recovery_path, &mut bcj)?;
 
-    println!("{:?}", bcj);
     Ok(bcj)
 }
 
@@ -116,7 +120,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_load() {
-        load();
+    fn test_recovery_load() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/recovery.jsonlz4");
+        let mut bcj = Box::new(CookieJar::new());
+
+        load_from_recovery(&path, &mut bcj).expect("Failed to load from firefox recovery json");
+
+        let c = bcj.get("taarId").expect("Failed to get cookie from firefox recovery");
+
+        assert_eq!(c.value(), "value");
+        assert_eq!(c.path(), Some("/"));
+        assert_eq!(c.secure(), Some(true));
+        assert_eq!(c.http_only(), Some(true));
+        assert_eq!(c.domain(), Some("addons.mozilla.org"));
+    }
+
+    #[test]
+    fn test_master_profile() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/profiles.ini");
+
+        let default_profile_path = get_default_profile_path(&path).expect("Failed to parse master firefox profile");
+
+        assert!(default_profile_path.ends_with(PathBuf::from("Profiles/1qbuu7ux.default")));
     }
 }
