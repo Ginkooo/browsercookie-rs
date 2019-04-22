@@ -1,3 +1,4 @@
+//! Exported errors if library users wish to handle certain failure cases
 use std::fmt;
 use std::error;
 

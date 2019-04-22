@@ -45,10 +45,12 @@ use std::error::Error;
 mod firefox;
 pub mod errors;
 
+/// All supported browsers
 pub enum Browser {
     Firefox
 }
 
+/// Main struct facilitating operations like collection & parsing of cookies from browsers
 pub struct Browsercookies {
     pub cj: Box<CookieJar>
 }

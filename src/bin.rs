@@ -58,7 +58,7 @@ fn main() {
         }
     }
 
-    if let Some(cookie_name) = matches.value_of("cookie") {
+    if let Some(cookie_name) = matches.value_of("name") {
         print!("{}", bc.cj.get(cookie_name).expect("Cookie not present").value());
     } else {
         match matches.value_of("output").unwrap() {
