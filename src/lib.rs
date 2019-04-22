@@ -5,28 +5,30 @@
 //! used with other http libraries like Hyper etc..
 //!
 //! ```rust,ignore
-//! use Browsercookie::get_browsercookies;
-//! use Browsercookie::Browser;
+//! use Browsercookie::{Browser, Browsercookies};
 //!
-//! let res = get_browsercookies(Browser::Firefox);
-//! if let Ok(cj) = res {
+//! let mut bc = Browsercookies::new();
+//! let domain_regex = Regex::new(".*");
+//! bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get firefox browser cookies");
+//! if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<Error>> {
 //!     println!("Cookies extracted");
-//!     // .... Do something with cookiejar ...
 //! }
 //! ```
 //!
-//! Using above cookiejar with `get_cookieheader` returns a string to
-//! be used with http clients as a header directly.
+//! Using above `to_header` returns a string to be used with http clients as a header
+//! directly.
 //!
 //! ```rust,ignore
 //! use reqwest::header;
-//! use Browsercookie::*;
+//! use Browsercookie::{Browser, Browsercookies};
 //!
-//! let res = get_browsercookies(Browser::Firefox);
-//! if let Ok(cj) = res {
+//! let mut bc = Browsercookies::new();
+//! let domain_regex = Regex::new("www.rust-lang.org");
+//! bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get firefox browser cookies");
+//!
+//! if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<Error>> {
 //!     let mut headers = header::HeaderMap::new();
-//!     headers.insert(header::COOKIE, header::HeaderValue::from_str(
-//!         get_cookieheader(cj, "www.rust-lang.org"));
+//!     headers.insert(header::COOKIE, header::HeaderValue::from_str(&cookie_header));
 //!
 //!     let client = reqwest::Client::builder()
 //!         .default_headers(headers)
@@ -58,17 +60,16 @@ impl Browsercookies {
         }
     }
 
-    pub fn from_browser(&mut self, b: Browser) -> Result<(), Box<Error>> {
+    pub fn from_browser(&mut self, b: Browser, domain_regex: &Regex) -> Result<(), Box<Error>> {
         match b {
-            Browser::Firefox => return firefox::load(&mut self.cj)
+            Browser::Firefox => return firefox::load(&mut self.cj, domain_regex)
         }
     }
 
-    pub fn to_header(&self, domain: &str) -> Result<String, Box<Error>> {
+    pub fn to_header(&self, domain_regex: &Regex) -> Result<String, Box<Error>> {
         let mut header = String::from("");
-        let domain_re = Regex::new(domain)?;
         for cookie in self.cj.iter() {
-            if domain_re.is_match(domain) {
+            if domain_regex.is_match(cookie.domain().unwrap()) {
                 header.push_str(&format!("{}={}; ", cookie.name(), cookie.value()));
             }
         }
@@ -83,8 +84,9 @@ mod tests {
     #[test]
     fn test_firefox() {
         let mut bc = Browsercookies::new();
-        bc.from_browser(Browser::Firefox).expect("Failed to get firefox browser cookies");
-        if let Ok(cookie_header) = bc.to_header(".*") as Result<String, Box<Error>> {
+        let domain_regex = Regex::new(".*").unwrap();
+        bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get firefox browser cookies");
+        if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<Error>> {
             assert_eq!(cookie_header, "name=value; ");
         }
     }

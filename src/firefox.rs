@@ -1,5 +1,6 @@
 use ini::Ini;
 use std::fs::File;
+use regex::Regex;
 use std::io::Cursor;
 use std::error::Error;
 use cookie::{Cookie, CookieJar};
@@ -70,7 +71,7 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>
     Ok(default_profile_path)
 }
 
-fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>) -> Result<bool, Box<Error>> {
+fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<bool, Box<Error>> {
     let recovery_file = File::open(recovery_path)?;
     let recovery_mmap = unsafe { MmapOptions::new().map(&recovery_file)? };
 
@@ -86,18 +87,21 @@ fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>) -> Result<
     let recovery_json: Value = serde_json::from_slice(&recovery_json_bytes)?;
     for c in recovery_json["cookies"].as_array().ok_or("Invalid recovery")? {
         if let Ok(cookie) = serde_json::from_value(c.clone()) as Result<MozCookie, serde_json::error::Error> {
-            bcj.add(Cookie::build(cookie.name, cookie.value)
-                             .domain(cookie.host)
-                             .path(cookie.path)
-                             .secure(cookie.secure)
-                             .http_only(cookie.httponly)
-                             .finish());
+            // println!("Loading for {}: {}={}", cookie.host, cookie.name, cookie.value);
+            if domain_regex.is_match(&cookie.host) {
+                bcj.add(Cookie::build(cookie.name, cookie.value)
+                                 .domain(cookie.host)
+                                 .path(cookie.path)
+                                 .secure(cookie.secure)
+                                 .http_only(cookie.httponly)
+                                 .finish());
+            }
         }
     }
     Ok(true)
 }
 
-pub(crate) fn load(bcj: &mut Box<CookieJar>) -> Result<(), Box<Error>>  {
+pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<Error>>  {
     // Returns a CookieJar on heap if following steps go right
     //
     // 1. Get default profile path for firefox from master ini profiles config.
@@ -117,7 +121,7 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>) -> Result<(), Box<Error>>  {
         return Err(Box::new(BrowsercookieError::InvalidCookieStore(String::from("Firefox invalid cookie store"))))
     }
 
-    load_from_recovery(&recovery_path, bcj)?;
+    load_from_recovery(&recovery_path, bcj, domain_regex)?;
 
     Ok(())
 }
@@ -132,7 +136,8 @@ mod tests {
         path.push("tests/resources/recovery.jsonlz4");
         let mut bcj = Box::new(CookieJar::new());
 
-        load_from_recovery(&path, &mut bcj).expect("Failed to load from firefox recovery json");
+        let domain_re = Regex::new(".*").unwrap();
+        load_from_recovery(&path, &mut bcj, &domain_re).expect("Failed to load from firefox recovery json");
 
         let c = bcj.get("taarId").expect("Failed to get cookie from firefox recovery");
 
