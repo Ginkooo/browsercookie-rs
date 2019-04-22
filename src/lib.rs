@@ -47,21 +47,33 @@ pub enum Browser {
     Firefox
 }
 
-pub fn get_browsercookies(b: Browser) -> Result<Box<CookieJar>, Box<Error>> {
-    match b {
-        Browser::Firefox => return firefox::load()
-    }
+pub struct Browsercookies {
+    pub cj: Box<CookieJar>
 }
 
-pub fn get_cookieheader(bcj: Box<CookieJar>, domain: &str) -> Result<String, Box<Error>> {
-    let mut header = String::from("");
-    let domain_re = Regex::new(domain)?;
-    for cookie in bcj.iter() {
-        if domain_re.is_match(domain) {
-            header.push_str(&format!("{}={}; ", cookie.name(), cookie.value()));
+impl Browsercookies {
+    pub fn new() -> Browsercookies {
+        Browsercookies {
+            cj: Box::new(CookieJar::new())
         }
     }
-    Ok(header)
+
+    pub fn from_browser(&mut self, b: Browser) -> Result<(), Box<Error>> {
+        match b {
+            Browser::Firefox => return firefox::load(&mut self.cj)
+        }
+    }
+
+    pub fn to_header(&self, domain: &str) -> Result<String, Box<Error>> {
+        let mut header = String::from("");
+        let domain_re = Regex::new(domain)?;
+        for cookie in self.cj.iter() {
+            if domain_re.is_match(domain) {
+                header.push_str(&format!("{}={}; ", cookie.name(), cookie.value()));
+            }
+        }
+        Ok(header)
+    }
 }
 
 #[cfg(test)]
@@ -70,8 +82,9 @@ mod tests {
 
     #[test]
     fn test_firefox() {
-        let bcj = get_browsercookies(Browser::Firefox).expect("Failed to get firefox browser cookies");
-        if let Ok(cookie_header) = get_cookieheader(bcj, ".*") as Result<String, Box<Error>> {
+        let mut bc = Browsercookies::new();
+        bc.from_browser(Browser::Firefox).expect("Failed to get firefox browser cookies");
+        if let Ok(cookie_header) = bc.to_header(".*") as Result<String, Box<Error>> {
             assert_eq!(cookie_header, "name=value; ");
         }
     }

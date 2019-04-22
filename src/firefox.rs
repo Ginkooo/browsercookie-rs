@@ -97,14 +97,12 @@ fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>) -> Result<
     Ok(true)
 }
 
-pub(crate) fn load() -> Result<Box<CookieJar>, Box<Error>>  {
+pub(crate) fn load(bcj: &mut Box<CookieJar>) -> Result<(), Box<Error>>  {
     // Returns a CookieJar on heap if following steps go right
     //
     // 1. Get default profile path for firefox from master ini profiles config.
     // 2. Load cookies from recovery json (sessionstore-backups/recovery.jsonlz4)
     //    of the default profile.
-    let mut bcj = Box::new(CookieJar::new());
-
     let master_profile_path = get_master_profile_path();
     if !master_profile_path.exists() {
         return Err(Box::new(BrowsercookieError::ProfileMissing(String::from("Firefox profile path doesn't exist"))))
@@ -119,9 +117,9 @@ pub(crate) fn load() -> Result<Box<CookieJar>, Box<Error>>  {
         return Err(Box::new(BrowsercookieError::InvalidCookieStore(String::from("Firefox invalid cookie store"))))
     }
 
-    load_from_recovery(&recovery_path, &mut bcj)?;
+    load_from_recovery(&recovery_path, bcj)?;
 
-    Ok(bcj)
+    Ok(())
 }
 
 #[cfg(test)]
