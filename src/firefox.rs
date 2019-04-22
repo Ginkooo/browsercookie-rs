@@ -1,6 +1,5 @@
 use ini::Ini;
 use std::fs::File;
-use dirs::home_dir;
 use std::io::Cursor;
 use std::error::Error;
 use cookie::{Cookie, CookieJar};
@@ -9,6 +8,7 @@ use lz4::block::decompress;
 use std::path::{Path, PathBuf};
 use serde_json::{Value};
 use byteorder::{LittleEndian, ReadBytesExt};
+#[allow(unused_imports)] use dirs::home_dir;
 
 use crate::errors::BrowsercookieError;
 
@@ -28,8 +28,17 @@ struct MozCookie {
     httponly: bool
 }
 
+#[cfg(test)]
 fn get_master_profile_path() -> PathBuf {
-    let mut path: PathBuf = home_dir().expect("Unable to find home directory");
+    // Only used for tests, should do this a better way by mocking
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/resources/profiles.ini");
+    path
+}
+
+#[cfg(not(test))]
+fn get_master_profile_path() -> PathBuf {
+    let mut path = home_dir().expect("Unable to find home directory");
     if cfg!(target_os = "macos") {
         path.push("Library/Application Support/Firefox/profiles.ini");
     } else if cfg!(target_os = "linux") {

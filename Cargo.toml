@@ -13,3 +13,4 @@ memmap = "0.7.0"
 rust-ini = "0.13.0"
 serde = { version = "1.0.90", features = ["derive"]}
 serde_json = "1.0.39"
+regex = "1"
