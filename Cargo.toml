@@ -1,7 +1,7 @@
 [package]
 name = "browsercookie-rs"
 version = "0.1.0"
-authors = ["tunnelshade <tunnelshade@gmail.com>"]
+authors = ["Bharadwaj Machiraju <tunnelshade.in>"]
 edition = "2018"
 exclude = [
     "tests/resources/*"
