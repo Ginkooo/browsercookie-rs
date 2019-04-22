@@ -3,9 +3,14 @@ name = "browsercookie-rs"
 version = "0.1.0"
 authors = ["Bharadwaj Machiraju <tunnelshade.in>"]
 edition = "2018"
-exclude = [
-    "tests/resources/*"
-]
+repository = "https://github.com/tunnelshade/browsercookie-rs"
+documentation = "https://docs.rs/browsercookie-rs/"
+exclude = ["tests/resources/*"]
+description = "A simple filesystem browser cookie extractor"
+readme = "README.rst"
+license = "MIT"
+keywords = ["cookies", "browser", "cli"]
+categories = ["command-line-utilities"]
 
 [lib]
 name = "browsercookie"
