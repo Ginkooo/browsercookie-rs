@@ -33,6 +33,13 @@ fn main() {
                              .default_value("firefox")
                              .help("Accepted values: firefox (only one can be provided)")
                              .takes_value(true))
+                        .arg(Arg::with_name("name")
+                             .short("n")
+                             .long("name")
+                             .conflicts_with("output")
+                             .value_name("COOKIE_NAME")
+                             .help("Specify a cookie name to output only that value")
+                             .takes_value(true))
                         .arg(Arg::with_name("output")
                              .short("o")
                              .long("output")
@@ -51,9 +58,13 @@ fn main() {
         }
     }
 
-    match matches.value_of("output").unwrap() {
-        "curl" => curl_output(&bc, &domain_regex),
-        "python" => python_output(&bc, &domain_regex),
-        _ => ()
+    if let Some(cookie_name) = matches.value_of("cookie") {
+        print!("{}", bc.cj.get(cookie_name).expect("Cookie not present").value());
+    } else {
+        match matches.value_of("output").unwrap() {
+            "curl" => curl_output(&bc, &domain_regex),
+            "python" => python_output(&bc, &domain_regex),
+            _ => ()
+        }
     }
 }
