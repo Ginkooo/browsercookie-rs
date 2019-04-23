@@ -4,10 +4,19 @@ browsercookie-rs
 A rust crate useful for extracting cookies from browsers. Inspired from
 `browsercookie <https://pypi.org/project/browsercookie/>`_ python library.
 
+Library
+*******
+
 Usage
 =====
 
 Using the library is quite simple
+
+.. code-block:: rust
+
+        // Cargo.toml
+        [dependencies]
+        browsercookie-rs = "0.1.1"
 
 .. code-block:: rust
 
@@ -22,7 +31,7 @@ Using the library is quite simple
 Better example should be present in `browsercookies <src/bin.rs>`_.
 
 Binary
-======
+******
 
 Same crate should also give you a binary ``browsercookies``, which should be usable
 from your favourite shell for crudely using frontend apis for simple tooling.
@@ -30,6 +39,13 @@ from your favourite shell for crudely using frontend apis for simple tooling.
 .. code-block:: rust
 
         browsercookies --domain jira
+
+Install
+=======
+
+.. code-block:: bash
+
+        cargo install -f browsercookie-rs
 
 
 Feature Matrix
