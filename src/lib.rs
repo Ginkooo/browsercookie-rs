@@ -61,13 +61,13 @@ impl Browsercookies {
         }
     }
 
-    pub fn from_browser(&mut self, b: Browser, domain_regex: &Regex) -> Result<(), Box<Error>> {
+    pub fn from_browser(&mut self, b: Browser, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
         match b {
             Browser::Firefox => return firefox::load(&mut self.cj, domain_regex)
         }
     }
 
-    pub fn to_header(&self, domain_regex: &Regex) -> Result<String, Box<Error>> {
+    pub fn to_header(&self, domain_regex: &Regex) -> Result<String, Box<dyn Error>> {
         let mut header = String::from("");
         for cookie in self.cj.iter() {
             if domain_regex.is_match(cookie.domain().unwrap()) {
@@ -87,7 +87,7 @@ mod tests {
         let mut bc = Browsercookies::new();
         let domain_regex = Regex::new(".*").unwrap();
         bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get firefox browser cookies");
-        if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<Error>> {
+        if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<dyn Error>> {
             println!("{}", cookie_header);
         }
     }

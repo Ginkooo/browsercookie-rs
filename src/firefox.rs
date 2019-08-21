@@ -33,7 +33,7 @@ fn get_master_profile_path() -> PathBuf {
     path
 }
 
-fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>> {
+fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<dyn Error>> {
     let profiles_conf: Ini;
     let mut default_profile_path = PathBuf::from(master_profile);
     default_profile_path.pop();
@@ -56,7 +56,7 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>
 }
 
 
-fn load_from_sqlite(cookie_path: &Path, bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<bool, Box<Error>> {
+fn load_from_sqlite(cookie_path: &Path, bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<bool, Box<dyn Error>> {
     let tmp_dir = TempDir::new("ff_cookies")?;
     let cookie_tmp = tmp_dir.path().join("cookies.sqlite");
     copy(cookie_path, &cookie_tmp)?;
@@ -92,7 +92,7 @@ fn load_from_sqlite(cookie_path: &Path, bcj: &mut Box<CookieJar>, domain_regex: 
     // unimplemented!()
 }
 
-pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<Error>>  {
+pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<dyn Error>>  {
     // Returns a CookieJar on heap if following steps go right
     //
     // 1. Get default profile path for firefox from master ini profiles config.
