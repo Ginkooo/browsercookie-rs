@@ -64,14 +64,14 @@ fn load_from_sqlite(cookie_path: &Path, bcj: &mut Box<CookieJar>, domain_regex: 
         let mut stmt = cookies_db.prepare("select * from moz_cookies")?;
         let cookie_iter = stmt.query_map(params![], |row| {
             Ok(MozCookie {
-                baseDomain: row.get(1)?,
-                originAttributes: row.get(2)?,
-                name: row.get(3)?,
-                value: row.get(4)?,
-                host: row.get(5)?,
-                path: row.get(6)?,
-                secure: row.get(10)?,
-                httponly: row.get(11)?,
+                baseDomain: "".to_string(),
+                originAttributes: row.get(1)?,
+                name: row.get(2)?,
+                value: row.get(3)?,
+                host: row.get(4)?,
+                path: row.get(5)?,
+                secure: row.get(9)?,
+                httponly: row.get(10)?,
             })
         })?;
         for cookie in cookie_iter {
