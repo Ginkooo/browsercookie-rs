@@ -7,10 +7,13 @@ use lz4::block::decompress;
 use memmap::MmapOptions;
 use regex::Regex;
 use serde_json::Value;
+use sqlite;
 use std::error::Error;
+use std::fs;
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use tempdir;
 
 use crate::errors::BrowsercookieError;
 
@@ -143,6 +146,51 @@ fn load_from_recovery(
     Ok(true)
 }
 
+fn load_from_sqldb(
+    profile_path: &Path,
+    bcj: &mut Box<CookieJar>,
+    domain_regex: &Regex,
+) -> Result<(), Box<Error>> {
+    let sql_path = profile_path.join(Path::new("cookies.sqlite"));
+    let tmp_dir = tempdir::TempDir::new("ff_cookies")?;
+    let tmp_cookies = tmp_dir.path().join("cookies.sqlite");
+    fs::copy(sql_path, &tmp_cookies)?;
+
+    let conn = sqlite::open(&tmp_cookies)?;
+    let mut cursor = conn.prepare("select host, path, isSecure, expiry, name, value, isHttpOnly from moz_cookies where host like ?")
+        .unwrap()
+        .into_cursor()
+        .bind(&[sqlite::Value::String(domain_regex.to_string())])?;
+
+    while let Some(Ok(row)) = cursor.next() {
+        let host: String = row.get::<String, _>(0);
+        let path: String = row.get::<String, _>(1);
+        let isSecure: bool = match row.get::<i64, _>(2) {
+            1 => true,
+            _ => false,
+        };
+        let expiry: i64 = row.get::<i64, _>(3);
+        let name: String = row.get::<String, _>(4);
+        let value: String = row.get::<String, _>(5);
+        let isHttpOnly: bool = match row.get::<i64, _>(6) {
+            1 => true,
+            _ => false,
+        };
+        let cookie = Cookie::build(name, value)
+            .domain(host)
+            .path(path)
+            .secure(isSecure)
+            .http_only(isHttpOnly)
+            .finish();
+
+        bcj.add(cookie);
+    }
+
+    fs::remove_file(tmp_cookies)?;
+    tmp_dir.close()?;
+    Ok(())
+}
+
 pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<Error>> {
     // Returns a CookieJar on heap if following steps go right
     //
@@ -158,7 +206,7 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
 
     let profile_path = get_default_profile_path(&master_profile_path)?;
 
-    let mut recovery_path = profile_path;
+    let mut recovery_path = profile_path.clone();
     recovery_path.push("sessionstore-backups/recovery.jsonlz4");
 
     if !recovery_path.exists() {
@@ -168,6 +216,7 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
     }
 
     load_from_recovery(&recovery_path, bcj, domain_regex)?;
+    load_from_sqldb(&profile_path, bcj, domain_regex)?;
 
     Ok(())
 }
