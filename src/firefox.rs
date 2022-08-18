@@ -1,15 +1,16 @@
-use ini::Ini;
-use std::fs::File;
-use regex::Regex;
-use std::io::Cursor;
-use std::error::Error;
-use cookie::{Cookie, CookieJar};
-use memmap::MmapOptions;
-use lz4::block::decompress;
-use std::path::{Path, PathBuf};
-use serde_json::{Value};
 use byteorder::{LittleEndian, ReadBytesExt};
-#[allow(unused_imports)] use dirs::home_dir;
+use cookie::{Cookie, CookieJar};
+#[allow(unused_imports)]
+use dirs::home_dir;
+use ini::Ini;
+use lz4::block::decompress;
+use memmap::MmapOptions;
+use regex::Regex;
+use serde_json::Value;
+use std::error::Error;
+use std::fs::File;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 
 use crate::errors::BrowsercookieError;
 
@@ -26,7 +27,7 @@ struct MozCookie {
     secure: bool,
 
     #[serde(default)]
-    httponly: bool
+    httponly: bool,
 }
 
 #[cfg(test)]
@@ -54,54 +55,95 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>
     default_profile_path.pop();
 
     match Ini::load_from_file(&master_profile) {
-        Err(_) => return Err(Box::new(BrowsercookieError::InvalidProfile(String::from("Unable to parse firefox ini profile")))),
-        Ok(p) => profiles_conf = p
+        Err(_) => {
+            return Err(Box::new(BrowsercookieError::InvalidProfile(String::from(
+                "Unable to parse firefox ini profile",
+            ))))
+        }
+        Ok(p) => profiles_conf = p,
     }
 
     for (sec, _) in &profiles_conf {
-        let section = profiles_conf.section(sec.clone()).ok_or("Invalid profile section")?;
-        match section.get("Default").and(section.get("Path")) {
-            Some(path) => {
-                default_profile_path.push(path);
-                break
+        if let Some(s) = sec {
+            // for firefox versions >= 72.0.1
+            if s.to_owned().starts_with("Install") {
+                let section = profiles_conf
+                    .section(sec.clone())
+                    .ok_or("Invalid profile section")?;
+                match section.get("Default") {
+                    Some(path) => {
+                        default_profile_path.push(path);
+                        break;
+                    }
+                    None => continue,
+                }
+            } else {
+                let section = profiles_conf
+                    .section(sec.clone())
+                    .ok_or("Invalid profile section")?;
+                match section.get("Default").and(section.get("Path")) {
+                    Some(path) => {
+                        default_profile_path.push(path);
+                        // eprintln!("Default profile path: {}", path.as_str());
+                        break;
+                    }
+                    None => continue,
+                }
             }
-            None => continue
         }
     }
     Ok(default_profile_path)
 }
 
-fn load_from_recovery(recovery_path: &Path, bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<bool, Box<Error>> {
+fn load_from_recovery(
+    recovery_path: &Path,
+    bcj: &mut Box<CookieJar>,
+    domain_regex: &Regex,
+) -> Result<bool, Box<Error>> {
     let recovery_file = File::open(recovery_path)?;
     let recovery_mmap = unsafe { MmapOptions::new().map(&recovery_file)? };
 
-    if recovery_mmap.len() <= 8 || recovery_mmap.get(0..8).ok_or("Invalid recovery")? != "mozLz40\0".as_bytes() {
-        return Err(Box::new(BrowsercookieError::InvalidRecovery(String::from("Firefox invalid recovery archive"))))
+    if recovery_mmap.len() <= 8
+        || recovery_mmap.get(0..8).ok_or("Invalid recovery")? != "mozLz40\0".as_bytes()
+    {
+        return Err(Box::new(BrowsercookieError::InvalidRecovery(String::from(
+            "Firefox invalid recovery archive",
+        ))));
     }
 
     let mut rdr = Cursor::new(recovery_mmap.get(8..12).ok_or("Invalid recovery")?);
     let uncompressed_size = rdr.read_i32::<LittleEndian>().ok();
 
-    let recovery_json_bytes = decompress(recovery_mmap.get(12..).ok_or("Invalid recovery")?, uncompressed_size)?;
+    let recovery_json_bytes = decompress(
+        recovery_mmap.get(12..).ok_or("Invalid recovery")?,
+        uncompressed_size,
+    )?;
 
     let recovery_json: Value = serde_json::from_slice(&recovery_json_bytes)?;
-    for c in recovery_json["cookies"].as_array().ok_or("Invalid recovery")? {
-        if let Ok(cookie) = serde_json::from_value(c.clone()) as Result<MozCookie, serde_json::error::Error> {
+    for c in recovery_json["cookies"]
+        .as_array()
+        .ok_or("Invalid recovery")?
+    {
+        if let Ok(cookie) =
+            serde_json::from_value(c.clone()) as Result<MozCookie, serde_json::error::Error>
+        {
             // println!("Loading for {}: {}={}", cookie.host, cookie.name, cookie.value);
             if domain_regex.is_match(&cookie.host) {
-                bcj.add(Cookie::build(cookie.name, cookie.value)
-                                 .domain(cookie.host)
-                                 .path(cookie.path)
-                                 .secure(cookie.secure)
-                                 .http_only(cookie.httponly)
-                                 .finish());
+                bcj.add(
+                    Cookie::build(cookie.name, cookie.value)
+                        .domain(cookie.host)
+                        .path(cookie.path)
+                        .secure(cookie.secure)
+                        .http_only(cookie.httponly)
+                        .finish(),
+                );
             }
         }
     }
     Ok(true)
 }
 
-pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<Error>>  {
+pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<Error>> {
     // Returns a CookieJar on heap if following steps go right
     //
     // 1. Get default profile path for firefox from master ini profiles config.
@@ -109,7 +151,9 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
     //    of the default profile.
     let master_profile_path = get_master_profile_path();
     if !master_profile_path.exists() {
-        return Err(Box::new(BrowsercookieError::ProfileMissing(String::from("Firefox profile path doesn't exist"))))
+        return Err(Box::new(BrowsercookieError::ProfileMissing(String::from(
+            "Firefox profile path doesn't exist",
+        ))));
     }
 
     let profile_path = get_default_profile_path(&master_profile_path)?;
@@ -118,7 +162,9 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
     recovery_path.push("sessionstore-backups/recovery.jsonlz4");
 
     if !recovery_path.exists() {
-        return Err(Box::new(BrowsercookieError::InvalidCookieStore(String::from("Firefox invalid cookie store"))))
+        return Err(Box::new(BrowsercookieError::InvalidCookieStore(
+            String::from("Firefox invalid cookie store"),
+        )));
     }
 
     load_from_recovery(&recovery_path, bcj, domain_regex)?;
@@ -137,9 +183,12 @@ mod tests {
         let mut bcj = Box::new(CookieJar::new());
 
         let domain_re = Regex::new(".*").unwrap();
-        load_from_recovery(&path, &mut bcj, &domain_re).expect("Failed to load from firefox recovery json");
+        load_from_recovery(&path, &mut bcj, &domain_re)
+            .expect("Failed to load from firefox recovery json");
 
-        let c = bcj.get("taarId").expect("Failed to get cookie from firefox recovery");
+        let c = bcj
+            .get("taarId")
+            .expect("Failed to get cookie from firefox recovery");
 
         assert_eq!(c.value(), "value");
         assert_eq!(c.path(), Some("/"));
@@ -153,7 +202,8 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("tests/resources/profiles.ini");
 
-        let default_profile_path = get_default_profile_path(&path).expect("Failed to parse master firefox profile");
+        let default_profile_path =
+            get_default_profile_path(&path).expect("Failed to parse master firefox profile");
 
         assert!(default_profile_path.ends_with(PathBuf::from("Profiles/1qbuu7ux.default")));
     }
