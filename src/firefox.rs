@@ -19,6 +19,7 @@ use crate::errors::BrowsercookieError;
 struct MozCookie {
     host: String,
     name: String,
+    #[allow(dead_code)]
     originAttributes: Value,
     path: String,
     value: String,
@@ -49,12 +50,12 @@ fn get_master_profile_path() -> PathBuf {
     path
 }
 
-fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>> {
+fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<dyn Error>> {
     let profiles_conf: Ini;
     let mut default_profile_path = PathBuf::from(master_profile);
     default_profile_path.pop();
 
-    match Ini::load_from_file(&master_profile) {
+    match Ini::load_from_file(master_profile) {
         Err(_) => {
             return Err(Box::new(BrowsercookieError::InvalidProfile(String::from(
                 "Unable to parse firefox ini profile",
@@ -71,7 +72,7 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<Error>
                 .1
                 .iter()
                 .find(|&(key, _)| key == "Default")
-                .and_then(|s| Some(s.1))
+                .map(|s| s.1)
         });
 
     if default_install_profile_directory.is_some() {
@@ -98,7 +99,7 @@ fn load_from_recovery(
     recovery_path: &Path,
     bcj: &mut Box<CookieJar>,
     domain_regex: &Regex,
-) -> Result<bool, Box<Error>> {
+) -> Result<bool, Box<dyn Error>> {
     let recovery_file = File::open(recovery_path)?;
     let recovery_mmap = unsafe { MmapOptions::new().map(&recovery_file)? };
 
@@ -142,7 +143,7 @@ fn load_from_recovery(
     Ok(true)
 }
 
-pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<Error>> {
+pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
     // Returns a CookieJar on heap if following steps go right
     //
     // 1. Get default profile path for firefox from master ini profiles config.

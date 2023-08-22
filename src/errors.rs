@@ -1,13 +1,13 @@
 //! Exported errors if library users wish to handle certain failure cases
-use std::fmt;
 use std::error;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum BrowsercookieError {
     ProfileMissing(String),
     InvalidProfile(String),
     InvalidCookieStore(String),
-    InvalidRecovery(String)
+    InvalidRecovery(String),
 }
 
 impl fmt::Display for BrowsercookieError {
@@ -22,7 +22,7 @@ impl error::Error for BrowsercookieError {
         "Error in fetching browsercookies"
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         // Generic error, underlying cause isn't tracked.
         None
     }

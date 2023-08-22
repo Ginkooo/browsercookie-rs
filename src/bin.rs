@@ -1,6 +1,6 @@
-use regex::Regex;
-use clap::{Arg, App};
 use browsercookie::{Browser, Browsercookies};
+use clap::{App, Arg};
+use regex::Regex;
 
 #[macro_use]
 extern crate clap;
@@ -15,56 +15,68 @@ fn python_output(bc: &Browsercookies, domain_regex: &Regex) {
 
 fn main() {
     let matches = App::new("browsercookies")
-                        .version(crate_version!())
-                        .author(crate_authors!())
-                        .about(crate_description!())
-                        .arg(Arg::with_name("domain")
-                             .short("d")
-                             .long("domain")
-                             .value_name("DOMAIN_REGEX")
-                             .required(true)
-                             .help("Sets a domain filter for cookies")
-                             .takes_value(true))
-                        .arg(Arg::with_name("browser")
-                             .short("b")
-                             .long("browser")
-                             .value_name("BROWSER")
-                             .multiple(true)
-                             .default_value("firefox")
-                             .help("Accepted values: firefox (only one can be provided)")
-                             .takes_value(true))
-                        .arg(Arg::with_name("name")
-                             .short("n")
-                             .long("name")
-                             .conflicts_with("output")
-                             .value_name("COOKIE_NAME")
-                             .help("Specify a cookie name to output only that value")
-                             .takes_value(true))
-                        .arg(Arg::with_name("output")
-                             .short("o")
-                             .long("output")
-                             .value_name("OUTPUT_FORMAT")
-                             .help("Accepted values: curl,python (only one can be provided)")
-                             .default_value("curl")
-                             .takes_value(true))
-                        .get_matches();
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
+        .arg(
+            Arg::with_name("domain")
+                .short("d")
+                .long("domain")
+                .value_name("DOMAIN_REGEX")
+                .required(true)
+                .help("Sets a domain filter for cookies")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("browser")
+                .short("b")
+                .long("browser")
+                .value_name("BROWSER")
+                .multiple(true)
+                .default_value("firefox")
+                .help("Accepted values: firefox (only one can be provided)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("name")
+                .short("n")
+                .long("name")
+                .conflicts_with("output")
+                .value_name("COOKIE_NAME")
+                .help("Specify a cookie name to output only that value")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("output")
+                .short("o")
+                .long("output")
+                .value_name("OUTPUT_FORMAT")
+                .help("Accepted values: curl,python (only one can be provided)")
+                .default_value("curl")
+                .takes_value(true),
+        )
+        .get_matches();
 
     let mut bc = Browsercookies::new();
     let domain_regex = Regex::new(matches.value_of("domain").unwrap()).unwrap();
 
-    for b in  matches.values_of("browser").unwrap() {
-        if b == "firefox"  {
-            bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get cookies from firefox");
+    for b in matches.values_of("browser").unwrap() {
+        if b == "firefox" {
+            bc.from_browser(Browser::Firefox, &domain_regex)
+                .expect("Failed to get cookies from firefox");
         }
     }
 
     if let Some(cookie_name) = matches.value_of("name") {
-        print!("{}", bc.cj.get(cookie_name).expect("Cookie not present").value());
+        print!(
+            "{}",
+            bc.cj.get(cookie_name).expect("Cookie not present").value()
+        );
     } else {
         match matches.value_of("output").unwrap() {
             "curl" => curl_output(&bc, &domain_regex),
             "python" => python_output(&bc, &domain_regex),
-            _ => ()
+            _ => (),
         }
     }
 }
