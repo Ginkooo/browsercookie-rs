@@ -179,7 +179,11 @@ fn load_from_sqlite(
     Ok(true)
 }
 
-fn load_cookies_from_all_sources(profile_path: PathBuf, bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
+fn load_cookies_from_all_sources(
+    profile_path: PathBuf,
+    bcj: &mut Box<CookieJar>,
+    domain_regex: &Regex,
+) -> Result<(), Box<dyn Error>> {
     let mut recovery_path = profile_path.clone();
     let mut sqlite_path = profile_path;
     recovery_path.push("sessionstore-backups/recovery.jsonlz4");
@@ -254,7 +258,9 @@ mod tests {
         load_from_sqlite(&path, &mut bcj, &domain_re)
             .expect("Failtd to load cookies from firefox sqlite");
 
-        let c = bcj.get("some_name").expect("Failed to get cookie from firefox sqlite");
+        let c = bcj
+            .get("some_name")
+            .expect("Failed to get cookie from firefox sqlite");
         assert_eq!(c.value(), "some_value");
         assert_eq!(c.path(), Some("/"));
         assert_eq!(c.secure(), Some(true));
@@ -273,7 +279,6 @@ mod tests {
 
         assert!(result.is_err_and(|e| e.is::<BrowsercookieError>()));
     }
-
 
     #[test]
     fn test_master_profile() {
