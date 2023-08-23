@@ -6,6 +6,7 @@ use ini::Ini;
 use lz4::block::decompress;
 use memmap::MmapOptions;
 use regex::Regex;
+use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 use std::error::Error;
 use std::fs::File;
@@ -143,6 +144,61 @@ fn load_from_recovery(
     Ok(true)
 }
 
+fn load_from_sqlite(
+    sqlite_path: &Path,
+    bcj: &mut Box<CookieJar>,
+    domain_regex: &Regex,
+) -> Result<bool, Box<dyn Error>> {
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY;
+
+    let conn = Connection::open_with_flags(sqlite_path, flags)?;
+
+    let mut query =
+        conn.prepare("SELECT name, value, host, path, isSecure, isHttpOnly FROM moz_cookies")?;
+
+    let cookies = query.query_map([], |row| {
+        Ok(
+            Cookie::build(row.get::<_, String>(0)?, row.get::<_, String>(1)?)
+                .domain(row.get::<_, String>(2)?)
+                .path(row.get::<_, String>(3)?)
+                .secure(row.get(4)?)
+                .http_only(row.get(5)?)
+                .finish(),
+        )
+    })?;
+
+    cookies
+        .filter_map(|c| c.ok())
+        .filter(|c| {
+            domain_regex.is_match(
+                c.domain()
+                    .expect("We set the domain above, so it should always exist"),
+            )
+        })
+        .for_each(|c| bcj.add(c));
+    Ok(true)
+}
+
+fn load_cookies_from_all_sources(profile_path: PathBuf, bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
+    let mut recovery_path = profile_path.clone();
+    let mut sqlite_path = profile_path;
+    recovery_path.push("sessionstore-backups/recovery.jsonlz4");
+    sqlite_path.push("cookies.sqlite");
+
+    let sqlite_load_result = load_from_sqlite(&sqlite_path, bcj, domain_regex).ok();
+    let recovery_load_result = load_from_recovery(&recovery_path, bcj, domain_regex).ok();
+
+    if recovery_load_result.is_none() && sqlite_load_result.is_none() {
+        if !recovery_path.exists() {
+            return Err(Box::new(BrowsercookieError::InvalidCookieStore(
+                String::from("Could not load cookies from Firefox sqlite cookie store nor from recovery file"),
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
     // Returns a CookieJar on heap if following steps go right
     //
@@ -158,16 +214,7 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
 
     let profile_path = get_default_profile_path(&master_profile_path)?;
 
-    let mut recovery_path = profile_path;
-    recovery_path.push("sessionstore-backups/recovery.jsonlz4");
-
-    if !recovery_path.exists() {
-        return Err(Box::new(BrowsercookieError::InvalidCookieStore(
-            String::from("Firefox invalid cookie store"),
-        )));
-    }
-
-    load_from_recovery(&recovery_path, bcj, domain_regex)?;
+    load_cookies_from_all_sources(profile_path, bcj, domain_regex)?;
 
     Ok(())
 }
@@ -196,6 +243,37 @@ mod tests {
         assert_eq!(c.http_only(), Some(true));
         assert_eq!(c.domain(), Some("addons.mozilla.org"));
     }
+
+    #[test]
+    fn test_sqlite_load() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/cookies.sqlite");
+        let mut bcj = Box::new(CookieJar::new());
+
+        let domain_re = Regex::new(".*").unwrap();
+        load_from_sqlite(&path, &mut bcj, &domain_re)
+            .expect("Failtd to load cookies from firefox sqlite");
+
+        let c = bcj.get("some_name").expect("Failed to get cookie from firefox sqlite");
+        assert_eq!(c.value(), "some_value");
+        assert_eq!(c.path(), Some("/"));
+        assert_eq!(c.secure(), Some(true));
+        assert_eq!(c.http_only(), Some(true));
+        assert_eq!(c.domain(), Some("some_host"));
+    }
+
+    #[test]
+    fn will_both_recovery_file_and_sqlite_file_do_not_exist() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/Profiles/profile_with_no_cookie_files");
+        let mut bcj = Box::new(CookieJar::new());
+
+        let domain_re = Regex::new(".*").unwrap();
+        let result = load_cookies_from_all_sources(path, &mut bcj, &domain_re);
+
+        assert!(result.is_err_and(|e| e.is::<BrowsercookieError>()));
+    }
+
 
     #[test]
     fn test_master_profile() {

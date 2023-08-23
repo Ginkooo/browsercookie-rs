@@ -2,3 +2,5 @@
 **/*.rs.bk
 Cargo.lock
 tags
+cookies.sqlite-shm
+cookies.sqlite-wal
