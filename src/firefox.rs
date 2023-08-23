@@ -194,7 +194,9 @@ fn load_cookies_from_all_sources(
 
     if recovery_load_result.is_none() && sqlite_load_result.is_none() {
         return Err(Box::new(BrowsercookieError::InvalidCookieStore(
-            String::from("Could not load cookies from Firefox sqlite cookie store nor from recovery file"),
+            String::from(
+                "Could not load cookies from Firefox sqlite cookie store nor from recovery file",
+            ),
         )));
     }
 
