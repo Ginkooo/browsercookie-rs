@@ -36,7 +36,7 @@
 //!     let res = client.get("https://www.rust-lang.org").send()?;
 //! }
 //! ```
-use cookie::{CookieJar, Cookie};
+use cookie::{Cookie, CookieJar};
 use regex::Regex;
 use std::error::Error;
 
@@ -80,7 +80,15 @@ impl Browsercookies {
     }
 
     pub fn get(&self, domain_regex: &Regex) -> Result<Vec<Cookie>, Box<dyn Error>> {
-        Ok(self.cj.iter().filter_map(|cookie| domain_regex.is_match(cookie.domain().expect("every cookie should have a domain")).then_some(cookie.clone())).collect())
+        Ok(self
+            .cj
+            .iter()
+            .filter_map(|cookie| {
+                domain_regex
+                    .is_match(cookie.domain().expect("every cookie should have a domain"))
+                    .then_some(cookie.clone())
+            })
+            .collect())
     }
 }
 
