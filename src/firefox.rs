@@ -19,7 +19,6 @@ use crate::errors::BrowsercookieError;
 struct MozCookie {
     host: String,
     name: String,
-    originAttributes: Value,
     path: String,
     value: String,
 
@@ -70,7 +69,8 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<dyn Er
             section
                 .1
                 .iter()
-                .find(|&(key, _)| key == "Default").map(|s| s.1)
+                .find(|&(key, _)| key == "Default")
+                .map(|s| s.1)
         });
 
     if default_install_profile_directory.is_some() {
