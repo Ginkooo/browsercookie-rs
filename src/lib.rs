@@ -36,39 +36,46 @@
 //!     let res = client.get("https://www.rust-lang.org").send()?;
 //! }
 //! ```
-use regex::Regex;
 use cookie::CookieJar;
+use regex::Regex;
 use std::error::Error;
 
-#[macro_use] extern crate serde;
+#[macro_use]
+extern crate serde;
 
-mod firefox;
 pub mod errors;
+mod firefox;
 
 /// All supported browsers
 pub enum Browser {
-    Firefox
+    Firefox,
 }
 
 /// Main struct facilitating operations like collection & parsing of cookies from browsers
 pub struct Browsercookies {
-    pub cj: Box<CookieJar>
+    pub cj: Box<CookieJar>,
+}
+
+impl Default for Browsercookies {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Browsercookies {
     pub fn new() -> Browsercookies {
         Browsercookies {
-            cj: Box::new(CookieJar::new())
+            cj: Box::new(CookieJar::new()),
         }
     }
 
-    pub fn from_browser(&mut self, b: Browser, domain_regex: &Regex) -> Result<(), Box<Error>> {
+    pub fn from_browser(&mut self, b: Browser, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
         match b {
-            Browser::Firefox => return firefox::load(&mut self.cj, domain_regex)
+            Browser::Firefox => return firefox::load(&mut self.cj, domain_regex),
         }
     }
 
-    pub fn to_header(&self, domain_regex: &Regex) -> Result<String, Box<Error>> {
+    pub fn to_header(&self, domain_regex: &Regex) -> Result<String, Box<dyn Error>> {
         let mut header = String::from("");
         for cookie in self.cj.iter() {
             if domain_regex.is_match(cookie.domain().unwrap()) {
@@ -87,8 +94,9 @@ mod tests {
     fn test_firefox() {
         let mut bc = Browsercookies::new();
         let domain_regex = Regex::new(".*").unwrap();
-        bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get firefox browser cookies");
-        if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<Error>> {
+        bc.from_browser(Browser::Firefox, &domain_regex)
+            .expect("Failed to get firefox browser cookies");
+        if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<dyn Error>> {
             assert_eq!(cookie_header, "name=value; ");
         }
     }
