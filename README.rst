@@ -16,7 +16,7 @@ Using the library is quite simple
 
         // Cargo.toml
         [dependencies]
-        browsercookie-rs = "0.1.1"
+        browsercookie-rs = { git="https://github.com/Ginkooo/browserscookie-rs.git", branch="main" }
 
 .. code-block:: rust
 
