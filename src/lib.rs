@@ -40,6 +40,8 @@
 use cookie::CookieJar;
 use regex::Regex;
 use std::collections::HashSet;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 #[macro_use]
 extern crate serde;
@@ -48,7 +50,7 @@ pub mod errors;
 mod firefox;
 
 /// All supported browsers
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, EnumIter)]
 pub enum Browser {
     Firefox,
 }
@@ -84,7 +86,17 @@ impl CookieFinderBuilder {
         self
     }
 
-    pub fn build(self) -> CookieFinder {
+    pub fn build(mut self) -> CookieFinder {
+        if self.cookie_finder.regex_and_attribute_pairs.is_empty() {
+            self.cookie_finder
+                .regex_and_attribute_pairs
+                .push((Regex::new(".*").unwrap(), Attribute::Name));
+        }
+        if self.cookie_finder.browsers.is_empty() {
+            for browser in Browser::iter() {
+                self.cookie_finder.browsers.insert(browser);
+            }
+        }
         self.cookie_finder
     }
 }
@@ -117,7 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_firefox() {
-        let domain_regex = Regex::new(".*").unwrap();
+        let domain_regex = Regex::new(r"httpbin\.org|somehost").unwrap();
         let cookies = CookieFinder::builder()
             .with_regexp(domain_regex, Attribute::Domain)
             .with_browser(Browser::Firefox)
@@ -135,5 +147,27 @@ mod tests {
         assert_eq!(sqlite_cookie.value(), "somevalue");
         assert_eq!(sqlite_cookie.path(), Some("/"));
         assert_eq!(sqlite_cookie.domain(), Some("somehost"));
+    }
+
+    #[tokio::test]
+    async fn test_would_find_all_cookies_with_no_builder_withs() {
+        let cookies = CookieFinder::builder().build().find().await;
+        assert_eq!(cookies.iter().count(), 3);
+        let recovery_cookie = cookies.get("name").unwrap();
+        assert_eq!(recovery_cookie.value(), "value");
+        assert_eq!(recovery_cookie.domain(), Some("httpbin.org"));
+        assert_eq!(recovery_cookie.path(), Some("/"));
+
+        let sqlite_cookie = cookies.get("somename").unwrap();
+
+        assert_eq!(sqlite_cookie.value(), "somevalue");
+        assert_eq!(sqlite_cookie.path(), Some("/"));
+        assert_eq!(sqlite_cookie.domain(), Some("somehost"));
+
+        let other_sqlite_cookie = cookies.get("othername").unwrap();
+
+        assert_eq!(other_sqlite_cookie.value(), "othervalue");
+        assert_eq!(other_sqlite_cookie.path(), Some("/"));
+        assert_eq!(other_sqlite_cookie.domain(), Some("otherhost"));
     }
 }
