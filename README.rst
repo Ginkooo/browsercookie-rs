@@ -64,3 +64,9 @@ macOS          ✔        ✗
 Windows        ✗        ✗
 ========== ========= ========
 
+
+Contributions
+=============
+
+
+Contributions are very welcome. Easiest way to contribute is look at the Python library https://github.com/borisbabic/browser_cookie3, try to mimic the behaviour, which this library lack, and submit a pull request. Make sure to format it, clippy and include some tests.
