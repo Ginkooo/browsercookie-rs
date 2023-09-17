@@ -2,17 +2,22 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use cookie::{Cookie, CookieJar};
 #[allow(unused_imports)]
 use dirs::home_dir;
+use futures::TryStreamExt;
 use ini::Ini;
 use lz4::block::decompress;
 use memmap::MmapOptions;
 use regex::Regex;
 use serde_json::Value;
+use sqlx::prelude::*;
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::SqliteConnection;
 use std::error::Error;
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use crate::errors::BrowsercookieError;
+use crate::Attribute;
 
 #[allow(non_snake_case)]
 #[derive(Deserialize, Debug)]
@@ -80,7 +85,7 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<dyn Er
 
     for (sec, _) in &profiles_conf {
         let section = profiles_conf
-            .section(sec.clone())
+            .section(sec)
             .ok_or("Invalid profile section")?;
         match section.get("Default").and(section.get("Path")) {
             Some(path) => {
@@ -93,11 +98,44 @@ fn get_default_profile_path(master_profile: &Path) -> Result<PathBuf, Box<dyn Er
     Ok(default_profile_path)
 }
 
-fn load_from_recovery(
+async fn load_from_sqlite(
+    sqlite_path: &Path,
+    cookie_jar: &mut CookieJar,
+    domain_regex: &(Regex, Attribute),
+) -> Result<(), Box<dyn Error>> {
+    let options = SqliteConnectOptions::new()
+        .filename(sqlite_path)
+        .read_only(true)
+        .immutable(true);
+    let mut conn = SqliteConnection::connect_with(&options)
+        .await
+        .expect("Could not connect to cookies.sqlite");
+    let mut query = sqlx::query("SELECT name, value, host from moz_cookies").fetch(&mut conn);
+
+    while let Some(row) = query.try_next().await? {
+        let name: String = row.get(0);
+        let value: String = row.get(1);
+        let host: String = row.get(2);
+
+        if domain_regex.0.is_match(&host) {
+            cookie_jar.add(
+                Cookie::build(name, value)
+                    .domain(host)
+                    .path("/")
+                    .secure(false)
+                    .http_only(false)
+                    .finish(),
+            );
+        }
+    }
+    Ok(())
+}
+
+async fn load_from_recovery(
     recovery_path: &Path,
-    bcj: &mut Box<CookieJar>,
-    domain_regex: &Regex,
-) -> Result<bool, Box<dyn Error>> {
+    cookie_jar: &mut CookieJar,
+    regex_and_attribute: &(Regex, Attribute),
+) -> Result<(), Box<dyn Error>> {
     let recovery_file = File::open(recovery_path)?;
     let recovery_mmap = unsafe { MmapOptions::new().map(&recovery_file)? };
 
@@ -126,8 +164,8 @@ fn load_from_recovery(
             serde_json::from_value(c.clone()) as Result<MozCookie, serde_json::error::Error>
         {
             // println!("Loading for {}: {}={}", cookie.host, cookie.name, cookie.value);
-            if domain_regex.is_match(&cookie.host) {
-                bcj.add(
+            if regex_and_attribute.0.is_match(&cookie.host) {
+                cookie_jar.add(
                     Cookie::build(cookie.name, cookie.value)
                         .domain(cookie.host)
                         .path(cookie.path)
@@ -138,11 +176,14 @@ fn load_from_recovery(
             }
         }
     }
-    Ok(true)
+    Ok(())
 }
 
-pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
-    // Returns a CookieJar on heap if following steps go right
+pub(crate) async fn load(
+    cookie_jar: &mut CookieJar,
+    regex_and_attribute: &(Regex, Attribute),
+) -> Result<(), Box<dyn Error>> {
+    // Returns a CookieJar if following steps go right
     //
     // 1. Get default profile path for firefox from master ini profiles config.
     // 2. Load cookies from recovery json (sessionstore-backups/recovery.jsonlz4)
@@ -156,16 +197,19 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
 
     let profile_path = get_default_profile_path(&master_profile_path)?;
 
-    let mut recovery_path = profile_path;
+    let mut recovery_path = profile_path.clone();
     recovery_path.push("sessionstore-backups/recovery.jsonlz4");
 
-    if !recovery_path.exists() {
-        return Err(Box::new(BrowsercookieError::InvalidCookieStore(
-            String::from("Firefox invalid cookie store"),
-        )));
+    if recovery_path.exists() {
+        load_from_recovery(&recovery_path, cookie_jar, regex_and_attribute).await?;
     }
 
-    load_from_recovery(&recovery_path, bcj, domain_regex)?;
+    let mut sqlite_path = profile_path.clone();
+
+    if sqlite_path.exists() {
+        sqlite_path.push("cookies.sqlite");
+        load_from_sqlite(&sqlite_path, cookie_jar, regex_and_attribute).await?;
+    }
 
     Ok(())
 }
@@ -174,14 +218,15 @@ pub(crate) fn load(bcj: &mut Box<CookieJar>, domain_regex: &Regex) -> Result<(),
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_recovery_load() {
+    #[tokio::test]
+    async fn test_recovery_load() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("tests/resources/recovery.jsonlz4");
         let mut bcj = Box::new(CookieJar::new());
 
         let domain_re = Regex::new(".*").unwrap();
-        load_from_recovery(&path, &mut bcj, &domain_re)
+        load_from_recovery(&path, &mut bcj, &(domain_re, Attribute::Domain))
+            .await
             .expect("Failed to load from firefox recovery json");
 
         let c = bcj
@@ -193,6 +238,23 @@ mod tests {
         assert_eq!(c.secure(), Some(true));
         assert_eq!(c.http_only(), Some(true));
         assert_eq!(c.domain(), Some("addons.mozilla.org"));
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_load() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/Profiles/1qbuu7ux.default/cookies.sqlite");
+        let domain_re = Regex::new(".*").unwrap();
+        let mut bcj = Box::new(CookieJar::new());
+        load_from_sqlite(&path, &mut bcj, &(domain_re, Attribute::Domain))
+            .await
+            .unwrap();
+
+        let cookie = bcj.get("somename").unwrap();
+
+        assert_eq!(cookie.value(), "somevalue");
+        assert_eq!(cookie.path(), Some("/"));
+        assert_eq!(cookie.domain(), Some("somehost"));
     }
 
     #[test]

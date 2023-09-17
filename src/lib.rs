@@ -5,18 +5,19 @@
 //! used with other http libraries like Hyper etc..
 //!
 //! ```rust,ignore
-//! use Browsercookie::{Browser, Browsercookies};
+//! use Browsercookie::{Browser, Attribute, CookieFinder};
 //!
-//! let mut bc = Browsercookies::new();
-//! let domain_regex = Regex::new(".*");
-//! bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get firefox browser cookies");
-//! if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<Error>> {
-//!     println!("Cookies extracted");
-//! }
+//! let mut cookie_jar = CookieFinder::builder()
+//!     .with_regexp(Regex::new(".*").unwrap(), Attribute::Domain)
+//!     .with_browser(Browser::Firefox)
+//!     .build().find().await.unwrap();
+//!
+//! println!("{}", cookie_jar.get("searched_cookie_name").unwrap());
+//!
 //! ```
 //!
 //! Using above `to_header` returns a string to be used with http clients as a header
-//! directly.
+//! directlytrue.
 //!
 //! ```rust,ignore
 //! use reqwest::header;
@@ -38,7 +39,7 @@
 //! ```
 use cookie::CookieJar;
 use regex::Regex;
-use std::error::Error;
+use std::collections::HashSet;
 
 #[macro_use]
 extern crate serde;
@@ -47,42 +48,66 @@ pub mod errors;
 mod firefox;
 
 /// All supported browsers
+#[derive(PartialEq, Eq, Hash)]
 pub enum Browser {
     Firefox,
 }
 
-/// Main struct facilitating operations like collection & parsing of cookies from browsers
-pub struct Browsercookies {
-    pub cj: Box<CookieJar>,
+pub enum Attribute {
+    Name,
+    Value,
+    Domain,
+    Path,
 }
 
-impl Default for Browsercookies {
-    fn default() -> Self {
-        Self::new()
+#[derive(Default)]
+pub struct CookieFinder {
+    regex_and_attribute_pairs: Vec<(Regex, Attribute)>,
+    browsers: HashSet<Browser>,
+}
+
+#[derive(Default)]
+pub struct CookieFinderBuilder {
+    cookie_finder: CookieFinder,
+}
+
+impl CookieFinderBuilder {
+    pub fn with_regexp(mut self, regex: Regex, attribute: Attribute) -> Self {
+        self.cookie_finder
+            .regex_and_attribute_pairs
+            .push((regex, attribute));
+        self
+    }
+
+    pub fn with_browser(mut self, browser: Browser) -> Self {
+        self.cookie_finder.browsers.insert(browser);
+        self
+    }
+
+    pub fn build(self) -> CookieFinder {
+        self.cookie_finder
     }
 }
 
-impl Browsercookies {
-    pub fn new() -> Browsercookies {
-        Browsercookies {
-            cj: Box::new(CookieJar::new()),
-        }
+impl CookieFinder {
+    pub fn builder() -> CookieFinderBuilder {
+        CookieFinderBuilder::default()
     }
 
-    pub fn from_browser(&mut self, b: Browser, domain_regex: &Regex) -> Result<(), Box<dyn Error>> {
-        match b {
-            Browser::Firefox => return firefox::load(&mut self.cj, domain_regex),
-        }
-    }
-
-    pub fn to_header(&self, domain_regex: &Regex) -> Result<String, Box<dyn Error>> {
-        let mut header = String::from("");
-        for cookie in self.cj.iter() {
-            if domain_regex.is_match(cookie.domain().unwrap()) {
-                header.push_str(&format!("{}={}; ", cookie.name(), cookie.value()));
+    pub async fn find(&self) -> CookieJar {
+        let mut cookie_jar = CookieJar::new();
+        for regex_and_attribute in &self.regex_and_attribute_pairs {
+            for browser in &self.browsers {
+                match browser {
+                    Browser::Firefox => {
+                        firefox::load(&mut cookie_jar, regex_and_attribute)
+                            .await
+                            .expect("Something went wrong loading the cookies from Firefox");
+                    }
+                }
             }
         }
-        Ok(header)
+        cookie_jar
     }
 }
 
@@ -90,14 +115,25 @@ impl Browsercookies {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_firefox() {
-        let mut bc = Browsercookies::new();
+    #[tokio::test]
+    async fn test_firefox() {
         let domain_regex = Regex::new(".*").unwrap();
-        bc.from_browser(Browser::Firefox, &domain_regex)
-            .expect("Failed to get firefox browser cookies");
-        if let Ok(cookie_header) = bc.to_header(&domain_regex) as Result<String, Box<dyn Error>> {
-            assert_eq!(cookie_header, "name=value; ");
-        }
+        let cookies = CookieFinder::builder()
+            .with_regexp(domain_regex, Attribute::Domain)
+            .with_browser(Browser::Firefox)
+            .build()
+            .find()
+            .await;
+        assert_eq!(cookies.iter().count(), 2);
+        let recovery_cookie = cookies.get("name").unwrap();
+        assert_eq!(recovery_cookie.value(), "value");
+        assert_eq!(recovery_cookie.domain(), Some("httpbin.org"));
+        assert_eq!(recovery_cookie.path(), Some("/"));
+
+        let sqlite_cookie = cookies.get("somename").unwrap();
+
+        assert_eq!(sqlite_cookie.value(), "somevalue");
+        assert_eq!(sqlite_cookie.path(), Some("/"));
+        assert_eq!(sqlite_cookie.domain(), Some("somehost"));
     }
 }

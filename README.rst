@@ -20,13 +20,18 @@ Using the library is quite simple
 
 .. code-block:: rust
 
-        use browsercookie::{Browsercookies, Browser};
+        use browsercookie::{CookieFinder, Browser, Attribute};
 
-        let mut bc = Browsercookies::new();
-        let domain_regex = Regex::new("google.com").unwrap();
+        let mut cookie_jar = CookieFinder::builder()
+            .with_regexp(Regex::new("google.com").unwrap(), Attribute::Domain)
+            .with_browser(Browser::Firefox)
+            .build
+            .find()
+            .await.unwrap();
 
-        bc.from_browser(Browser::Firefox, &domain_regex).expect("Failed to get cookies from firefox");
-        println!("Cookie header string: Cookie: {}", bc.to_header(domain_regex));
+        let cookie = cookie_jar.get("some_cookie_name").unwrap();
+
+        println!("Cookie header string: Cookie: {}", cookie);
 
 Better example should be present in `browsercookies <src/bin.rs>`_.
 
