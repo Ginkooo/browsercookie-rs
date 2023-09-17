@@ -33,6 +33,8 @@ Using the library is quite simple
 
         println!("Cookie header string: Cookie: {}", cookie);
 
+You can omit whe .with_ calls to get all cookies from all browsers.
+
 Better example should be present in `browsercookies <src/bin.rs>`_.
 
 Binary
