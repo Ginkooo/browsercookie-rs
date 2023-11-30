@@ -26,7 +26,7 @@ doc = false
 
 [dependencies]
 byteorder = "1"
-cookie = "0"
+cookie = "0.18"
 dirs = "1"
 lz4 = "1"
 memmap = "0"
