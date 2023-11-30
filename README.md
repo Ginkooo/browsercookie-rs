@@ -12,18 +12,19 @@ Using the library is quite simple
 ```rust
 // Cargo.toml
 [dependencies]
-browsercookie-rs = { git="https://github.com/Ginkooo/browserscookie-rs.git", branch="main" }
+browsercookie-rs = { git="https://github.com/Ginkooo/browsercookie-rs.git", branch="main" }
 ```
 
 ```rust
 use browsercookie::{CookieFinder, Browser, Attribute};
+use regex::Regex;
 
 let mut cookie_jar = CookieFinder::builder()
     .with_regexp(Regex::new("google.com").unwrap(), Attribute::Domain)
     .with_browser(Browser::Firefox)
-    .build
+    .build()
     .find()
-    .await.unwrap();
+    .await;
 
 let cookie = cookie_jar.get("some_cookie_name").unwrap();
 
