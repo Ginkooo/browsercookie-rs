@@ -119,12 +119,12 @@ async fn load_from_sqlite(
 
         if domain_regex.0.is_match(&host) {
             cookie_jar.add(
-                Cookie::build(name, value)
+                Cookie::build((name, value))
                     .domain(host)
                     .path("/")
                     .secure(false)
                     .http_only(false)
-                    .finish(),
+                    .build(),
             );
         }
     }
@@ -166,12 +166,12 @@ async fn load_from_recovery(
             // println!("Loading for {}: {}={}", cookie.host, cookie.name, cookie.value);
             if regex_and_attribute.0.is_match(&cookie.host) {
                 cookie_jar.add(
-                    Cookie::build(cookie.name, cookie.value)
+                    Cookie::build((cookie.name, cookie.value))
                         .domain(cookie.host)
                         .path(cookie.path)
                         .secure(cookie.secure)
                         .http_only(cookie.httponly)
-                        .finish(),
+                        .build(),
                 );
             }
         }

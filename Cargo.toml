@@ -1,13 +1,16 @@
 [package]
 name = "browsercookie-rs"
-version = "0.2.0"
-authors = ["Bharadwaj Machiraju <tunnelshade.in>", "Piotr Czajka <piotr.filip.czajka@gmail.com"]
+version = "0.2.1"
+authors = [
+    "Bharadwaj Machiraju <tunnelshade.in>",
+    "Piotr Czajka <piotr.filip.czajka@gmail.com",
+]
 edition = "2018"
 repository = "https://github.com/ginkooo/browsercookie-rs"
 documentation = "https://docs.rs/browsercookie-rs/"
 exclude = ["tests/resources/*"]
 description = "A simple filesystem browser cookie extractor"
-readme = "README.rst"
+readme = "README.md"
 license = "MIT"
 keywords = ["cookies", "browser", "cli"]
 categories = ["command-line-utilities"]
@@ -23,12 +26,12 @@ doc = false
 
 [dependencies]
 byteorder = "1"
-cookie = "0"
+cookie = "0.18"
 dirs = "1"
 lz4 = "1"
 memmap = "0"
 rust-ini = "0"
-serde = { version = "1", features = ["derive"]}
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
 clap = "2"
