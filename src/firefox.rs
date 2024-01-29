@@ -49,6 +49,8 @@ fn get_master_profile_path() -> PathBuf {
         path.push("Library/Application Support/Firefox/profiles.ini");
     } else if cfg!(target_os = "linux") {
         path.push(".mozilla/firefox/profiles.ini")
+    } else if cfg!(target_os = "windows") {
+        path.push("AppData/Roaming/Mozilla/Firefox/profiles.ini")
     }
     path
 }
